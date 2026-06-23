@@ -11,28 +11,113 @@ local function S(m)
     end)
 end
 
-S("START")
+S("===== START DUMP =====")
 
-local old=loadstring
+-- Hook loadstring
+local oldLS=loadstring
 loadstring=function(c,n)
-    S("LS: "..tostring(n).." size:"..#c)
-    if #c>50 then S(c:sub(1,1900)) end
-    return old(c,n)
+    S("LS: "..tostring(n).." | "..#c.." chars")
+    if #c>100 then S(c:sub(1,1900)) end
+    return oldLS(c,n)
 end
 
-local og=game.HttpGet
+-- Hook HttpGet
+local oldGet=game.HttpGet
 game.HttpGet=function(s,u,...)
     S("GET: "..u)
-    local r=og(s,u,...)
-    if #r>50 then S("RESP: "..r:sub(1,1900)) end
+    local r=oldGet(s,u,...)
+    if r and #r>100 then
+        S("RESP: "..#r.." chars")
+        S(r:sub(1,1900))
+    end
     return r
 end
 
-S("LOADING...")
-local loader=game:HttpGet("https://api.luarmor.net/files/v4/loaders/d69f617d5177f0dd59232b8b05640600.lua")
-S("SIZE:"..#loader)
-local f=loadstring(loader)
-if f then S("RUN") f() S("DONE") else S("FAIL") end
-wait(3)
-S("END")
+-- Hook HttpPost
+local oldPost=game.HttpPost
+game.HttpPost=function(s,u,d,...)
+    S("POST: "..u)
+    S("DATA: "..tostring(d):sub(1,500))
+    return oldPost(s,u,d,...)
+end
+
+-- Hook require
+local oldReq=require
+require=function(id)
+    S("REQ: "..tostring(id))
+    return oldReq(id)
+end
+
+-- Hook print
+local oldPrint=print
+print=function(...)
+    local a={...}local m=""
+    for i,v in ipairs(a)do m=m..tostring(v).." "end
+    if #m>10 then S("PRINT: "..m:sub(1,500))end
+    oldPrint(...)
+end
+
+-- Hook error
+local oldErr=error
+error=function(m,l)
+    S("ERR: "..tostring(m))
+    return oldErr(m,l)
+end
+
+-- Hook pcall
+local oldPcall=pcall
+pcall=function(f,...)
+    S("PCALL")
+    local a,b=oldPcall(f,...)
+    if not a then S("PCALL FAIL: "..tostring(b))end
+    return a,b
+end
+
+-- Dump environment
+S("ENV DUMP:")
+local env={}
+for k,v in pairs(getfenv())do
+    if type(v)=="function"then env[k]="func"
+    elseif type(v)=="table"then env[k]="table"
+    else env[k]=tostring(v):sub(1,50)end
+end
+S(H:JSONEncode(env):sub(1,1900))
+
+-- Chạy loader
+S("===== LOADING =====")
+local success,err=pcall(function()
+    local loader=game:HttpGet("https://api.luarmor.net/files/v4/loaders/d69f617d5177f0dd59232b8b05640600.lua")
+    S("LOADER: "..#loader.." chars")
+    S(loader:sub(1,1900))
+    
+    local f=loadstring(loader)
+    if f then
+        S("EXECUTING...")
+        f()
+        S("EXECUTED")
+    else
+        S("LOADSTRING FAILED")
+    end
+end)
+
+if not success then
+    S("ERROR: "..tostring(err))
+end
+
+-- Dump các script đã capture
+S("===== CAPTURED =====")
+local count=0
+for k,v in pairs(getfenv())do
+    if type(v)=="function"then
+        local dump=string.dump(v)
+        if dump and #dump>100 then
+            count=count+1
+            S("FUNC "..count..": "..k.." | "..#dump.." bytes")
+            S(dump:sub(1,1900))
+        end
+    end
+end
+
+wait(5)
+S("===== DUMP COMPLETE =====")
 ]])()
